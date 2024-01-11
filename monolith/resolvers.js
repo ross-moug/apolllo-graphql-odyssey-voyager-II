@@ -2,18 +2,6 @@ const { AuthenticationError, ForbiddenError } = require('./utils/errors');
 
 const resolvers = {
   Query: {
-    user: async (_, { id }, { dataSources }) => {
-      const user = await dataSources.accountsAPI.getUser(id);
-      if (!user) {
-        throw new Error('No user found for this Id');
-      }
-      return user;
-    },
-    me: async (_, __, { dataSources, userId }) => {
-      if (!userId) throw AuthenticationError();
-      const user = await dataSources.accountsAPI.getUser(userId);
-      return user;
-    },
     searchListings: async (_, { criteria }, { dataSources }) => {
       const { numOfBeds, checkInDate, checkOutDate, page, limit, sortBy } = criteria;
       const listings = await dataSources.listingsAPI.getListings({ numOfBeds, page, limit, sortBy });
@@ -97,24 +85,6 @@ const resolvers = {
     },
   },
   Mutation: {
-    updateProfile: async (_, { updateProfileInput }, { dataSources, userId }) => {
-      if (!userId) throw AuthenticationError();
-      try {
-        const updatedUser = await dataSources.accountsAPI.updateUser({ userId, userInfo: updateProfileInput });
-        return {
-          code: 200,
-          success: true,
-          message: 'Profile successfully updated!',
-          user: updatedUser,
-        };
-      } catch (err) {
-        return {
-          code: 400,
-          success: false,
-          message: err.message,
-        };
-      }
-    },
     createBooking: async (_, { createBookingInput }, { dataSources, userId }) => {
       if (!userId) throw AuthenticationError();
 
@@ -281,11 +251,6 @@ const resolvers = {
       }
     },
   },
-  User: {
-    __resolveType(user) {
-      return user.role;
-    },
-  },
   Host: {
     overallRating: ({ id }, _, { dataSources }) => {
       return dataSources.reviewsDb.getOverallRatingForHost(id);
@@ -298,9 +263,9 @@ const resolvers = {
     },
   },
   Listing: {
-    host: ({ hostId }, _, { dataSources }) => {
-      return dataSources.accountsAPI.getUser(hostId);
-    },
+    host: ({ hostId }) => ({
+      id: hostId
+    }),
     overallRating: ({ id }, _, { dataSources }) => {
       return dataSources.reviewsDb.getOverallRatingForListing(id);
     },
@@ -332,9 +297,9 @@ const resolvers = {
     checkOutDate: ({ checkOutDate }, _, { dataSources }) => {
       return dataSources.bookingsDb.getHumanReadableDate(checkOutDate);
     },
-    guest: ({ guestId }, _, { dataSources }) => {
-      return dataSources.accountsAPI.getUser(guestId);
-    },
+    guest: ({ guestId }) => ({
+      id: guestId
+    }),
     totalPrice: async ({ listingId, checkInDate, checkOutDate }, _, { dataSources }) => {
       const { totalCost } = await dataSources.listingsAPI.getTotalCost({ id: listingId, checkInDate, checkOutDate });
       return totalCost;
@@ -350,9 +315,13 @@ const resolvers = {
     },
   },
   Review: {
-    author: ({ authorId }, _, { dataSources }) => {
-      return dataSources.accountsAPI.getUser(authorId);
-    },
+    author: (review) => {
+      const role = review.targetType === 'LISTING' || review.targetType === 'HOST'
+        ? 'Guest'
+        : 'Host';
+
+      return {__typename: role, id: review.authorId};
+    }
   },
   AmenityCategory: {
     ACCOMMODATION_DETAILS: 'Accommodation Details',
